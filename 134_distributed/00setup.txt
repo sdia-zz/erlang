@@ -1,0 +1,24 @@
+# first thing is to setup the cookie mecanism
+# it should contain an atom
+$ cd
+$ cat > .erlang.cookie
+this_is_very_secret
+$ chmod 400 .erlang.cookie
+
+#... the following should work as well
+erl -name brujo -setcookie this_is_very_secret
+
+
+# ... or inside the repl
+erlang:set_cookie(node(), this_is_very_secret).
+
+# a name is required for distribution
+$ erl -sname my_name
+
+
+# Note: each erlang system running on the same host is called node
+# Note: -sname assume that all nodes are in the same IP domain
+# Note: if different domains use -name instead (fully qualified name)
+
+
+# for the code check tut17.erl
