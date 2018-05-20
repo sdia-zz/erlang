@@ -1,8 +1,14 @@
 -module(company).
 -export([init/0, populate/0, fill_records/0,
-         raise_salary/2, all_females/0,
-         get_employee/1, females_qlc/0
 
+         %% functions based queries
+         raise_salary/2,
+         all_females/0,
+         get_employee/1,
+
+         %% QLC queries
+         qlc_females/0,
+         qlc_females_raise_salary/1
          ]).
 -include("company.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -18,11 +24,10 @@ init() ->
 insert_emp(Emp, DeptID, ProjNames) ->
   Ename = Emp#employee.name,
   io:format("~p~n", [Ename]),
-  F = fun() ->
-                mnesia:write(Emp),
-                AtDep = #at_dep{emp = Ename, dept_id = DeptID},
-                mnesia:write(AtDep),
-                mk_projs(Ename, ProjNames)
+  F = fun() -> mnesia:write(Emp),
+               AtDep = #at_dep{emp = Ename, dept_id = DeptID},
+               mnesia:write(AtDep),
+               mk_projs(Ename, ProjNames)
         end,
   mnesia:transaction(F).
 
@@ -48,25 +53,22 @@ populate() ->
 
 %% USING FUNCTIONS
 raise_salary(Emp_no, Amount) ->
-  F = fun() ->
-              [E] = mnesia:read(employee, Emp_no, write),
-              Salary = E#employee.salary + Amount,
-              New = E#employee{salary = Salary},
-              mnesia:write(New)
+  F = fun() -> [E] = mnesia:read(employee, Emp_no, write),
+               Salary = E#employee.salary + Amount,
+               New = E#employee{salary = Salary},
+               mnesia:write(New)
   end,
   mnesia:transaction(F).
 
 all_females() ->
-  F = fun() ->
-              Female = #employee{sex=female, name='$1', _ = '_'},
-              mnesia:select(employee, [{Female, [], ['$1']}])
+  F = fun() -> Female = #employee{sex=female, name='$1', _ = '_'},
+               mnesia:select(employee, [{Female, [], ['$1']}])
   end,
   mnesia:transaction(F).
 
 get_employee(Emp_no) ->
-  F = fun() ->
-    E = #employee{emp_no=Emp_no, name='$1', _='_'},
-    mnesia:select(employee, [{E, [], ['$1']}])
+  F = fun() -> E = #employee{emp_no=Emp_no, name='$1', _='_'},
+               mnesia:select(employee, [{E, [], ['$1']}])
   end,
   mnesia:transaction(F).
 
@@ -74,14 +76,30 @@ get_employee(Emp_no) ->
 %% USING QLC
 %% Using QLC can be more expensive than using Mnesia functions directly
 %% but offers a nice syntax.
-females_qlc() ->
-  F = fun() ->
-              %% Q = [e.name for e in employee_table if e.sex == female]
-              Q = qlc:q([E#employee.name || E <- mnesia:table(employee), E#employee.sex == female]),
-              qlc:e(Q) % <- feeds the list gen. to qlc:e/1
+qlc_females() ->
+  F = fun() -> %% Q = [e.name for e in employee_table if e.sex == female]
+               %% Q = qlc:q([E#employee.name || E <- mnesia:table(employee), E#employee.sex == female]),
+               Q = qlc:q([E || E <- mnesia:table(employee), E#employee.sex == female]),
+               qlc:e(Q) % <- feeds the list gen. to qlc:e/1
   end,
   mnesia:transaction(F).
 
+qlc_females_raise_salary(Amount) ->
+  F = fun() -> Q = qlc:q([E || E <- mnesia:table(employee),
+                                    E#employee.sex == female]),
+                   Fs = qlc:e(Q),
+                   over_write(Fs, Amount)
+  end,
+  mnesia:transaction(F).
+
+over_write([E|T], Amount) ->
+  New_Salary = E#employee.salary + Amount,
+  New = E#employee{salary = New_Salary},
+  mnesia:write(New),
+  over_write(T, Amount);
+
+
+over_write([], _) -> ok.
 
 
 
