@@ -1,5 +1,9 @@
 -module(company).
--export([init/0, populate/0, fill_records/0]).
+-export([init/0, populate/0, fill_records/0,
+         raise_salary/2, all_females/0,
+         get_employee/1, females_qlc/0
+
+         ]).
 -include("company.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -14,13 +18,13 @@ init() ->
 insert_emp(Emp, DeptID, ProjNames) ->
   Ename = Emp#employee.name,
   io:format("~p~n", [Ename]),
-  Fun = fun() ->
+  F = fun() ->
                 mnesia:write(Emp),
                 AtDep = #at_dep{emp = Ename, dept_id = DeptID},
                 mnesia:write(AtDep),
                 mk_projs(Ename, ProjNames)
         end,
-  mnesia:transaction(Fun).
+  mnesia:transaction(F).
 
 mk_projs(Ename, [ProjName | Tail]) ->
   mnesia:write(#in_proj{emp = Ename, proj_name = ProjName}),
@@ -39,6 +43,50 @@ populate() ->
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% EXAMPLES QUERIES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% USING FUNCTIONS
+raise_salary(Emp_no, Amount) ->
+  F = fun() ->
+              [E] = mnesia:read(employee, Emp_no, write),
+              Salary = E#employee.salary + Amount,
+              New = E#employee{salary = Salary},
+              mnesia:write(New)
+  end,
+  mnesia:transaction(F).
+
+all_females() ->
+  F = fun() ->
+              Female = #employee{sex=female, name='$1', _ = '_'},
+              mnesia:select(employee, [{Female, [], ['$1']}])
+  end,
+  mnesia:transaction(F).
+
+get_employee(Emp_no) ->
+  F = fun() ->
+    E = #employee{emp_no=Emp_no, name='$1', _='_'},
+    mnesia:select(employee, [{E, [], ['$1']}])
+  end,
+  mnesia:transaction(F).
+
+
+%% USING QLC
+%% Using QLC can be more expensive than using Mnesia functions directly
+%% but offers a nice syntax.
+females_qlc() ->
+  F = fun() ->
+              %% Q = [e.name for e in employee_table if e.sex == female]
+              Q = qlc:q([E#employee.name || E <- mnesia:table(employee), E#employee.sex == female]),
+              qlc:e(Q) % <- feeds the list gen. to qlc:e/1
+  end,
+  mnesia:transaction(F).
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% FIXTURES LOADING
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fill_records([]) -> ok;
@@ -47,7 +95,7 @@ fill_records([H|T]) ->
   fill_records(T).
 
 fill_records() ->
-  Fun = fun() ->
+  F = fun() ->
           fill_records(employees()),
           fill_records(depts()),
           fill_records(projects()),
@@ -55,7 +103,7 @@ fill_records() ->
           fill_records(at_deps()),
           fill_records(in_projs())
   end,
-  mnesia:transaction(Fun).
+  mnesia:transaction(F).
 
 
 %%-record(employee, {emp_no, name, salary, sex, phone, room_no}).
